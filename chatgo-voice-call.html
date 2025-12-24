@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ChatGo Voice Call</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI,Arial;
+  background:#0e1220;
+  color:#fff;
+  text-align:center;
+}
+header{
+  padding:14px;
+  background:linear-gradient(135deg,#2b2f77,#5f2eea);
+  font-size:18px;
+  font-weight:600;
+}
+.logo img{
+  width:70px;
+  margin-top:12px;
+  border-radius:12px;
+  background:#fff;
+}
+#box{
+  margin:20px;
+  padding:20px;
+  background:#1a1f3c;
+  border-radius:14px;
+}
+input{
+  width:90%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  margin:8px 0;
+  font-size:14px;
+}
+button{
+  padding:12px 18px;
+  border:none;
+  border-radius:10px;
+  margin:6px;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+}
+.call{background:#00e0ff;color:#000;}
+.end{background:#ff4d4d;color:#fff;}
+.status{
+  margin-top:10px;
+  font-size:14px;
+  color:#a6b1ff;
+}
+audio{display:none;}
+</style>
+</head>
+
+<body>
+
+<header>📞 ChatGo Voice Call</header>
+
+<div class="logo">
+  <img src="https://senior-azure-slxl61ev8n-abapx41dyw.edgeone.dev/1000199828_11zon_imresizer%20(1).png">
+  <div style="margin-top:6px;font-size:14px;">
+    Bright Career Public School
+  </div>
+</div>
+
+<div id="box">
+  <input id="room" placeholder="Enter Call Room ID">
+  <br>
+  <button class="call" onclick="startCall()">Start / Join Call</button>
+  <button class="end" onclick="endCall()">End Call</button>
+  <div class="status" id="status">Idle</div>
+</div>
+
+<audio id="remoteAudio" autoplay></audio>
+
+<script>
+let localStream;
+let peer;
+let roomId;
+
+async function startCall(){
+  roomId = document.getElementById("room").value.trim();
+  if(!roomId){
+    alert("Room ID likho");
+    return;
+  }
+
+  document.getElementById("status").innerText="Connecting…";
+
+  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+  peer = new RTCPeerConnection({
+    iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
+  });
+
+  localStream.getTracks().forEach(t=>peer.addTrack(t, localStream));
+
+  peer.ontrack = e=>{
+    document.getElementById("remoteAudio").srcObject = e.streams[0];
+    document.getElementById("status").innerText="Call Connected";
+  };
+
+  peer.onicecandidate = e=>{
+    if(e.candidate){
+      localStorage.setItem(roomId+"_ice",JSON.stringify(e.candidate));
+    }
+  };
+
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+  localStorage.setItem(roomId+"_offer",JSON.stringify(offer));
+
+  const ansCheck=setInterval(async()=>{
+    const ans=localStorage.getItem(roomId+"_answer");
+    if(ans){
+      await peer.setRemoteDescription(JSON.parse(ans));
+      clearInterval(ansCheck);
+    }
+  },1000);
+
+  setInterval(()=>{
+    const ice=localStorage.getItem(roomId+"_ice");
+    if(ice){
+      peer.addIceCandidate(JSON.parse(ice));
+    }
+  },1000);
+}
+
+setInterval(async()=>{
+  for(let k in localStorage){
+    if(k.endsWith("_offer")){
+      roomId=k.replace("_offer","");
+      if(!peer){
+        document.getElementById("status").innerText="Incoming call…";
+
+        localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+
+        peer = new RTCPeerConnection({
+          iceServers:[{ urls:"stun:stun.l.google.com:19302" }]
+        });
+
+        localStream.getTracks().forEach(t=>peer.addTrack(t,localStream));
+
+        peer.ontrack=e=>{
+          document.getElementById("remoteAudio").srcObject=e.streams[0];
+          document.getElementById("status").innerText="Call Connected";
+        };
+
+        const offer=JSON.parse(localStorage.getItem(k));
+        await peer.setRemoteDescription(offer);
+
+        const answer=await peer.createAnswer();
+        await peer.setLocalDescription(answer);
+        localStorage.setItem(roomId+"_answer",JSON.stringify(answer));
+      }
+    }
+  }
+},2000);
+
+function endCall(){
+  if(peer){
+    peer.close();
+    peer=null;
+  }
+  document.getElementById("status").innerText="Call Ended";
+}
+</script>
+
+</body>
+</html>
